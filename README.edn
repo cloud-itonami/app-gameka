@@ -1,4 +1,7 @@
 {:schema "etzhayyim.repository/v1"
- :name "com-etzhayyim-app-gameka"
+ :name "app-gameka"
  :kind :app
- :canonical-metadata :edn}
+ :canonical-metadata :edn
+ :boundary {:role :game-generation-application
+            :business-layer "cloud-itonami/gameka"
+            :craft-library "kotoba-lang/game-production"}}

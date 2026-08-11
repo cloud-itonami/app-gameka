@@ -1,4 +1,4 @@
 {:schema "etzhayyim.migration/v1"
  :source {:repository "etzhayyim/root" :revision "57d57fc47f4b2544f2f71e8905c279f5cdf090f4" :path "60-apps/etzhayyim-project-gameka" :tree "8523aa3e90a0f5e4a780d2705dde8d18267880b9" :tracked-files 15 :bytes 72071}
- :destination {:repository "etzhayyim/com-etzhayyim-app-gameka"}
+ :destination {:repository "cloud-itonami/app-gameka"}
  :identity {:allowed-additions ["README.edn" "migration.edn"]}}
