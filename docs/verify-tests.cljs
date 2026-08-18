@@ -1,0 +1,231 @@
+#!/usr/bin/env nbb
+;; verify-tests.cljs — kotoba/ の vitest スイートを実際に走らせる
+;;
+;; この repo が README で「テストがある」と言うとき、それが本当かを確かめる。
+;; ファイルの存在ではなく **走らせた結果の件数** で答える。
+;;
+;;   nbb docs/verify-tests.cljs
+;;   nbb docs/verify-tests.cljs --keep    # 作業ディレクトリを消さずに残す
+;;
+;; exit 0 = PASS / 1 = FAIL（テストが落ちた）/ 3 = 判定できなかった
+;;
+;; ⚠ 「測れなかった」を「問題なし」と同じ値で返さない。3 はそのための値で、
+;;   pnpm/node が無い・圏外・pin が読めない・**走ったテストが 0 件**、は
+;;   すべて 3 で終わる。0 件を PASS と呼ばないための床がこの検査の要点である。
+;;
+;; ── なぜ普通に `npm install` しないのか（2026-08-18 実測）────────────────
+;;
+;; kotoba/package.json が宣言するとおりに入れようとすると入らない。順に:
+;;
+;;   1. npm 11.16.0 は git 依存の prepare を拒否する
+;;      （EALLOWSCRIPTS: `--allow-scripts` is not allowed in project-scoped installs）
+;;   2. pnpm 10.26.2 も同じ理由で拒否する
+;;      （ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED）。allowlist に載せると今度は
+;;      内部で `npm install` を呼ぶので 1 に戻る
+;;   3. その壁を越えても @etzhayyim/sdk の依存の奥で止まる —— kotoba-lang/ipfs#main の
+;;      package.json に name が無い（ERR_PNPM_MISSING_PACKAGE_NAME）
+;;
+;; しかし **テストの実行に @etzhayyim/sdk は要らない**。lifecycle.ts が sdk から
+;; 取るのは `import type` だけ（実行時に消える）で、テストが実行時に触るのは
+;; @etzhayyim/sdk-mock ただ 1 つ。その sdk-mock は import を 1 つも持たない
+;; 自己完結した 1 ファイルである。だからここでは sdk-mock を pin どおりに取って
+;; alias で挿し、vitest だけを入れて走らせる。
+;;
+;; これは回避策であって修正ではない。上流の 3 点が直れば `pnpm test` が直接通る。
+
+(require '["node:child_process" :as cp]
+         '["node:fs" :as fs]
+         '["node:os" :as os]
+         '["node:path" :as path]
+         '[clojure.string :as str])
+
+(def ^:private argv (vec (drop 2 (js->clj js/process.argv))))
+(def ^:private keep? (some #{"--keep"} argv))
+
+(defn- die! [code & msg]
+  (binding [*print-fn* *print-err-fn*] (apply println msg))
+  (js/process.exit code))
+
+(defn- run [{:keys [cwd env quiet?]} bin & args]
+  (try
+    {:ok true
+     :out (str (cp/execFileSync bin (clj->js (vec args))
+                                #js {:encoding "utf8"
+                                     :cwd (or cwd (js/process.cwd))
+                                     :stdio (if quiet? "pipe" #js ["pipe" "pipe" "pipe"])
+                                     :env (js/Object.assign #js {} js/process.env
+                                                            (clj->js (or env {})))}))}
+    (catch :default e
+      {:ok false
+       :out (str (some-> e .-stdout) (some-> e .-stderr))
+       :msg (or (some-> e .-message) "")})))
+
+(defn- have? [bin]
+  (:ok (run {:quiet? true} bin "--version")))
+
+;; ── ① 前提 ────────────────────────────────────────────────────────────────
+
+(when-not (fs/existsSync "kotoba/package.json")
+  (die! 3 "UNDETERMINED: kotoba/package.json が無い。この repo のルートで実行すること"))
+
+(def ^:private pkg
+  (try (js->clj (js/JSON.parse (fs/readFileSync "kotoba/package.json" "utf8"))
+                :keywordize-keys false)
+       (catch :default e
+         (die! 3 "UNDETERMINED: kotoba/package.json が JSON として読めない —"
+               (or (some-> e .-message) "")))))
+
+(def ^:private pm (cond (have? "pnpm") "pnpm" (have? "npm") "npm"
+                        :else (die! 3 "UNDETERMINED: pnpm も npm も無い")))
+
+(when-not (have? "git") (die! 3 "UNDETERMINED: git が無い"))
+
+;; ── ② pin を宣言から読む（焼き込まない）──────────────────────────────────
+;;
+;; sha を定数で持つと、package.json が動いたときに **宣言と違うものを検査して
+;; 緑を出す**。読めなければ 3 で降りる。
+
+(def ^:private mock-spec
+  (or (get-in pkg ["devDependencies" "@etzhayyim/sdk-mock"])
+      (die! 3 "UNDETERMINED: kotoba/package.json に @etzhayyim/sdk-mock の宣言が無い")))
+
+(def ^:private mock-sha
+  (or (second (re-find #"#([0-9a-f]{7,40})$" mock-spec))
+      (die! 3 (str "UNDETERMINED: @etzhayyim/sdk-mock の宣言から commit を読めない: "
+                   mock-spec))))
+
+(def ^:private mock-url
+  (or (some-> (re-find #"git\+(https://[^#]+)" mock-spec) second)
+      (die! 3 (str "UNDETERMINED: @etzhayyim/sdk-mock の宣言から URL を読めない: "
+                   mock-spec))))
+
+(def ^:private vitest-spec
+  (or (get-in pkg ["devDependencies" "vitest"])
+      (die! 3 "UNDETERMINED: kotoba/package.json に vitest の宣言が無い")))
+
+(def ^:private test-glob
+  ;; vitest.config.ts が include を持つならそれを尊重する。持たなければ既定。
+  (let [cfg (when (fs/existsSync "kotoba/vitest.config.ts")
+              (fs/readFileSync "kotoba/vitest.config.ts" "utf8"))]
+    (or (some-> cfg (->> (re-find #"include:\s*\[\s*\"([^\"]+)\"")) second)
+        "test/**/*.test.ts")))
+
+;; ── ③ 作業ディレクトリ ────────────────────────────────────────────────────
+
+(def ^:private work
+  (let [d (path/join (os/tmpdir) (str "gameka-verify-tests-" js/process.pid))]
+    (fs/mkdirSync d #js {:recursive true})
+    d))
+
+(def ^:private repo-root (js/process.cwd))
+
+(defn- cleanup! []
+  (when-not keep?
+    (try (fs/rmSync work #js {:recursive true :force true}) (catch :default _ nil))))
+
+(println (str "sdk-mock  " mock-url " @ " (subs mock-sha 0 (min 12 (count mock-sha)))))
+(println (str "vitest    " vitest-spec))
+(println (str "include   " test-glob))
+(println (str "work      " work))
+
+;; ── ④ sdk-mock を pin どおりに取る ───────────────────────────────────────
+;;
+;; shallow にしない（ADR-2607211600）。1 ファイルの repo なので full で足りる。
+
+(def ^:private mock-dir (path/join work "sdk-mock"))
+
+(let [r (run {:cwd work :quiet? true} "git" "clone" "--quiet" mock-url mock-dir)]
+  (when-not (:ok r)
+    (cleanup!)
+    (die! 3 "UNDETERMINED: sdk-mock を clone できなかった（圏外?）—" (:msg r))))
+
+(let [r (run {:cwd mock-dir :quiet? true} "git" "checkout" "--quiet" mock-sha)]
+  (when-not (:ok r)
+    (cleanup!)
+    (die! 3 (str "UNDETERMINED: sdk-mock に pin " mock-sha " が無い —") (:msg r))))
+
+(def ^:private mock-entry (path/join mock-dir "src" "index.ts"))
+(when-not (fs/existsSync mock-entry)
+  (cleanup!)
+  (die! 3 "UNDETERMINED: sdk-mock に src/index.ts が無い（構成が変わった?）"))
+
+;; ── ⑤ vitest だけ入れる ──────────────────────────────────────────────────
+
+(fs/writeFileSync
+ (path/join work "package.json")
+ (js/JSON.stringify
+  (clj->js {"name" "gameka-verify-tests" "private" true "type" "module"
+            "devDependencies" {"vitest" vitest-spec}})
+  nil 2))
+
+(let [r (run {:cwd work} pm "install" "--no-frozen-lockfile")
+      r (if (:ok r) r (run {:cwd work} pm "install"))]  ; npm は該当フラグを持たない
+  (when-not (:ok r)
+    (cleanup!)
+    (die! 3 "UNDETERMINED: vitest を入れられなかった（圏外?）—" (:msg r))))
+
+(def ^:private vitest-bin (path/join work "node_modules" ".bin" "vitest"))
+(when-not (fs/existsSync vitest-bin)
+  (cleanup!)
+  (die! 3 "UNDETERMINED: vitest の実行ファイルが見つからない"))
+
+;; ── ⑥ 走らせる ───────────────────────────────────────────────────────────
+
+(fs/writeFileSync
+ (path/join work "vitest.config.ts")
+ (str "import { defineConfig } from \"vitest/config\";\n"
+      "export default defineConfig({\n"
+      "  root: " (js/JSON.stringify (path/join repo-root "kotoba")) ",\n"
+      "  resolve: { alias: { \"@etzhayyim/sdk-mock\": "
+      (js/JSON.stringify mock-entry) " } },\n"
+      "  test: { environment: \"node\", include: ["
+      (js/JSON.stringify test-glob) "] },\n"
+      "});\n"))
+
+(def ^:private result
+  (run {:cwd work} vitest-bin "run" "--config" (path/join work "vitest.config.ts")))
+
+(def ^:private out (:out result))
+
+;; ── ⑦ 判定 ───────────────────────────────────────────────────────────────
+;;
+;; 出力から実際に走った件数を読む。読めない・0 件は PASS にしない。
+
+(def ^:private counts
+  ;; vitest は 1 件も走らなかったとき件数を数字で出さず `Tests  no tests` と書く。
+  ;; そこを数字の形だけで読むと、この分岐は **到達しない飾りの床** になる
+  ;; （実測 2026-08-18: 空の describe だけの test file で `no tests` を確認）。
+  ;; だから 0 件を専用に受ける。
+  (or (when (re-find #"(?m)^\s*Tests\s+no tests" out)
+        {:failed 0 :passed 0 :total 0})
+      (let [m (re-find #"(?m)^\s*Tests\s+(?:(\d+)\s+failed\s*\|\s*)?(\d+)\s+passed\s*\((\d+)\)" out)]
+        (when m {:failed (js/parseInt (or (nth m 1) "0") 10)
+                 :passed (js/parseInt (nth m 2) 10)
+                 :total  (js/parseInt (nth m 3) 10)}))))
+
+(def ^:private files
+  (some-> (re-find #"(?m)^\s*Test Files\s+.*?\((\d+)\)" out) second (js/parseInt 10)))
+
+(when-not counts
+  (println out)
+  (cleanup!)
+  (die! 3 "UNDETERMINED: vitest の出力から件数を読めなかった（上に生の出力）"))
+
+(let [{:keys [passed failed total]} counts]
+  (println (str "SCANNED\t" (or files 0) " テストファイル / " total " テスト"))
+  (cond
+    (zero? total)
+    (do (cleanup!)
+        (die! 3 "UNDETERMINED: 走ったテストが 0 件。"
+              "include が何にも当たっていない（0 件を PASS と呼ばない）"))
+
+    (pos? failed)
+    (do (println out)
+        (println (str "FAIL — " failed "/" total " が落ちた"))
+        (cleanup!)
+        (js/process.exit 1))
+
+    :else
+    (do (println (str "PASS — " passed "/" total " のテストが実際に走って通った"))
+        (cleanup!)
+        (js/process.exit 0))))
