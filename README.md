@@ -34,7 +34,7 @@ xrpc-adapter/ src/index.ts + wrangler.jsonc
 バイト単位で同一**。機械で確かめられる:
 
 ```bash
-nbb docs/verify-custody.cljs --origin
+kbb --backend sci docs/verify-custody.cljk --origin
 ```
 
 ## 何が動いて、何が動かないか
@@ -67,8 +67,8 @@ nbb docs/verify-custody.cljs --origin
 ## 使う
 
 ```bash
-nbb docs/verify-tests.cljs      # 10 テストを実際に走らせる（PASS/FAIL/3=判定不能）
-nbb docs/verify-custody.cljs    # 出所と一致しているか
+kbb --backend sci docs/verify-tests.cljk      # 10 テストを実際に走らせる（PASS/FAIL/3=判定不能）
+kbb --backend sci docs/verify-custody.cljk    # 出所と一致しているか
 ```
 
 **`kotoba/` で `npm install` は今日通らない。** 理由 3 つと、その回避が

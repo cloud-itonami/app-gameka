@@ -37,8 +37,8 @@ superproject の外に worktree を切る。
 変わっていない**ことを確かめられる。
 
 ```bash
-nbb docs/verify-custody.cljs            # ローカルだけ（network 不要）
-nbb docs/verify-custody.cljs --origin   # 出所 GitHub の実 tree とも突き合わせる
+kbb --backend sci docs/verify-custody.cljk            # ローカルだけ（network 不要）
+kbb --backend sci docs/verify-custody.cljk --origin   # 出所 GitHub の実 tree とも突き合わせる
 ```
 
 実際の出力:
@@ -64,7 +64,7 @@ PASS — 保管対象 15 ファイルは出所と同一
 ## 3. テストを走らせる
 
 ```bash
-nbb docs/verify-tests.cljs
+kbb --backend sci docs/verify-tests.cljk
 ```
 
 実際の出力（所要 9 秒、うちほとんどが sdk-mock の clone と vitest の取得）:
@@ -147,7 +147,7 @@ vitest は 1 件も走らなかったとき件数を数字で出さず `Tests  n
 ```bash
 # ① 実装を壊す → exit 1。落ちるテストが壊した箇所と一致する
 sed -i '' 's/input.brief.length > 2000/input.brief.length > 3000/' kotoba/src/lifecycle.ts
-nbb docs/verify-tests.cljs; echo $?
+kbb --backend sci docs/verify-tests.cljk; echo $?
 #   × rejects proposal with brief exceeding 2000 chars
 #   FAIL — 1/10 が落ちた          … exit 1
 git checkout kotoba/src/lifecycle.ts
