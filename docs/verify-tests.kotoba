@@ -1,11 +1,11 @@
-#!/usr/bin/env nbb
+#!/usr/bin/env kbb
 ;; verify-tests.cljs — kotoba/ の vitest スイートを実際に走らせる
 ;;
 ;; この repo が README で「テストがある」と言うとき、それが本当かを確かめる。
 ;; ファイルの存在ではなく **走らせた結果の件数** で答える。
 ;;
-;;   nbb docs/verify-tests.cljs
-;;   nbb docs/verify-tests.cljs --keep    # 作業ディレクトリを消さずに残す
+;;   kbb --backend sci docs/verify-tests.cljk
+;;   kbb --backend sci docs/verify-tests.cljk --keep    # 作業ディレクトリを消さずに残す
 ;;
 ;; exit 0 = PASS / 1 = FAIL（テストが落ちた）/ 3 = 判定できなかった
 ;;
