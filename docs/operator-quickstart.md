@@ -28,7 +28,7 @@ cd app-gameka
 ```
 
 west 管理下から使うなら `orgs/cloud-itonami/app-gameka` に既に在る。**その共有
-checkout で編集や commit をしない**（CLAUDE.md 並行エージェント運用）。触るなら
+checkout で編集や commit をしない**（AGENTS.md 並行エージェント運用）。触るなら
 superproject の外に worktree を切る。
 
 ## 2. 出所と一致しているか
@@ -135,7 +135,7 @@ alias で挿す。pin は焼き込まずその場で読む —— 焼き込む�
 | 3 | **判定できなかった** —— 圏外・道具が無い・記録が読めない・走ったテストが 0 件 |
 
 **3 は 0 と別の値である。** 測れなかったことを「問題なし」と同じ顔で返さない
-ためにこうしてある（CLAUDE.md「検査を書く前・緑を信じる前の 5 問」）。
+ためにこうしてある（AGENTS.md「検査を書く前・緑を信じる前の 5 問」）。
 `verify-tests.cljs` は **テストが 0 件走ったとき PASS と言わない** ——
 vitest は 1 件も走らなかったとき件数を数字で出さず `Tests  no tests` と書くので、
 そこを専用に受けている。
@@ -166,7 +166,7 @@ git checkout kotoba/src/lifecycle.ts
 
 ## 7. 次に触るなら
 
-- `CLAUDE.md` は現状の説明として誤っている（§「この repo に無いもの」）。
+- `AGENTS.md` は現状の説明として誤っている（§「この repo に無いもの」）。
   設計意図の資料として残すか、実態に合わせて削るかは決まっていない。
 - `kotoba/README.md` が張るリンク `../../../90-docs/adr/2605203000-*.md` は
   この repo に存在しない（抽出前のパス）。

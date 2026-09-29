@@ -4,12 +4,12 @@
 `kotoba/` が 13 の関数、`xrpc-adapter/` がそれを XRPC として並べる Cloudflare
 Worker のソース。この 2 つで全部である。
 
-名前が機能を示さない repo は README の冒頭で名乗る（CLAUDE.md「無い」と言う前に
+名前が機能を示さない repo は README の冒頭で名乗る（AGENTS.md「無い」と言う前に
 索引を引く）。**gameka = ゲーム化**、cloud-itonami の app 面に属する。
 
 ## この repo に無いもの（先に読むこと）
 
-同梱の `CLAUDE.md`（35 KB）は 5 本の BPMN プロセス・RisingWave のマイグレーション・
+同梱の `AGENTS.md`（35 KB）は 5 本の BPMN プロセス・RisingWave のマイグレーション・
 Rust の `kami-app-*` crate・playtest shell Worker・LangGraph の Python studio・
 `70-tools/scripts/lint/` の lint を、あたかもここに在るかのように記述している。
 **どれもこの repo には無い。** あれは抽出前の `etzhayyim/root` モノレポ全体を
@@ -18,12 +18,12 @@ Rust の `kami-app-*` crate・playtest shell Worker・LangGraph の Python studi
 実際に在るのは 17 ファイルだけである:
 
 ```
-README.edn  migration.edn  CLAUDE.md          ← 記録
+README.edn  migration.edn  AGENTS.md          ← 記録
 kotoba/       src/{index,types,lifecycle,automation}.ts + test/gameka.test.ts
 xrpc-adapter/ src/index.ts + wrangler.jsonc
 ```
 
-`CLAUDE.md` を仕様として読まないこと。設計の意図を読む資料としては有効だが、
+`AGENTS.md` を仕様として読まないこと。設計の意図を読む資料としては有効だが、
 **現状の説明としては誤りである。**
 
 ## 出所
